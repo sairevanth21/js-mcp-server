@@ -54,8 +54,10 @@ app.post("/messages", express.json(), async (req, res) => {
   }
 });
 
-// 4. Fire up the web listener bound to Render's dynamic port environment variable
+// 4. Fire up the web listener explicitly bound to 0.0.0.0 for external cloud access
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`Custom MCP Web Server is listening on port: ${PORT}`);
 });
+
