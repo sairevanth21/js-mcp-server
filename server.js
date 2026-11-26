@@ -6,11 +6,11 @@ import { z } from "zod";
 // 1. Initialize the Express Application and the MCP Core Instance
 const app = express();
 const server = new McpServer({
-  name: "My Live Universal Web MCP Server",
+  name: "My Universal Web MCP Server",
   version: "1.0.0",
 });
 
-// 2. Register an Actionable Tool
+// 2. Register Your Actionable Tool
 server.tool(
   "fetch-mock-data",
   {
@@ -34,28 +34,24 @@ server.tool(
   }
 );
 
-// 3. Define Web-Ready HTTP Cloud Routing Endpoints
+// 3. Robust, Standardized SSE Transport Binding (Handles ChatGPT & Cline automatically)
 let activeTransport = null;
 
-// FIX FOR CHATGPT: Expose standard metadata routing on root so ChatGPT knows this is an active MCP server
-app.get("/", (req, res) => {
-  res.json({
-    status: "active",
-    protocol: "mcp",
-    sse_endpoint: "https://onrender.com"
-  });
-});
-
+// The endpoint ChatGPT hits to look up tools and track routes
 app.get("/sse", async (req, res) => {
   activeTransport = new SSEServerTransport("/messages", res);
   await server.connect(activeTransport);
 });
 
+// The message endpoint where incoming JSON-RPC execution payloads are automatically handled
 app.post("/messages", express.json(), async (req, res) => {
   if (activeTransport) {
     await activeTransport.handleMessage(req, res);
   } else {
-    res.status(400).send("No active server transport connection initialized.");
+    // If ChatGPT hits messages first during discovery, instantly spin up a fallback bridge
+    activeTransport = new SSEServerTransport("/messages", res);
+    await server.connect(activeTransport);
+    await activeTransport.handleMessage(req, res);
   }
 });
 
