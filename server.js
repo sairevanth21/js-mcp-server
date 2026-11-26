@@ -10,7 +10,7 @@ const server = new McpServer({
   version: "1.0.0",
 });
 
-// 2. Register an Actionable Tool (AI clients can call this function automatically)
+// 2. Register an Actionable Tool
 server.tool(
   "fetch-mock-data",
   {
@@ -18,17 +18,11 @@ server.tool(
   },
   async ({ endpoint }) => {
     try {
-      // Using native global fetch to retrieve from a free sandbox API
       const response = await fetch(`https://typicode.com{endpoint}`);
-      
-      if (!response.ok) {
-        throw new Error(`Server returned HTTP status ${response.status}`);
-      }
-      
+      if (!response.ok) throw new Error(`Server returned HTTP status ${response.status}`);
       const payload = await response.json();
       
       return {
-        // Limit payloads to top 3 items to optimize tokens and transmission speeds
         content: [{ type: "text", text: JSON.stringify(payload.slice(0, 3), null, 2) }]
       };
     } catch (error) {
@@ -43,23 +37,21 @@ server.tool(
 // 3. Define Web-Ready HTTP Cloud Routing Endpoints
 let activeTransport = null;
 
-// Routing endpoint to establish long-lived Server-Sent Events (SSE) pipe channels
 app.get("/sse", async (req, res) => {
   activeTransport = new SSEServerTransport("/messages", res);
   await server.connect(activeTransport);
 });
 
-// Post processing route where the AI consumer posts JSON-RPC execution payloads
+// UNIVERSAL HANDLER FIX: Automatically establish an engine instance if hit directly by ChatGPT
 app.post("/messages", express.json(), async (req, res) => {
-  if (activeTransport) {
-    // FIX: Pass req.body directly to the transport instead of the raw request object
-    await activeTransport.handleMessage(req.body, res);
-  } else {
-    res.status(400).send("No active server transport connection initialized.");
+  if (!activeTransport) {
+    activeTransport = new SSEServerTransport("/messages", res);
+    await server.connect(activeTransport);
   }
+  await activeTransport.handleMessage(req.body, res);
 });
 
-// 4. Fire up the web listener bound to Render's dynamic port environment variable
+// 4. Fire up the web listener
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Custom MCP Web Server is listening on port: ${PORT}`);
