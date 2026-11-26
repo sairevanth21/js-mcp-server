@@ -1,14 +1,16 @@
+import express from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { z } from "zod";
 
-// 1. Initialize the Javascript MCP Server
+// 1. Initialize the Express Application and the MCP Core Instance
+const app = express();
 const server = new McpServer({
-  name: "My First Local MCP Server",
+  name: "My Live Custom Web MCP Server",
   version: "1.0.0",
 });
 
-// 2. Expose an Actionable Tool for the AI to use
+// 2. Register an Actionable Tool (AI clients can call this function automatically)
 server.tool(
   "fetch-mock-data",
   {
@@ -36,9 +38,24 @@ server.tool(
   }
 );
 
-// 3. Connect using standard terminal pipelines (Free local transport)
-const transport = new StdioServerTransport();
-await server.connect(transport);
+// 3. Define Web-Ready HTTP Cloud Routing Endpoints
+let activeTransport = null;
 
-// Note: Use console.error for logs so we don't break the communication channel
-console.error("Local JavaScript MCP Server successfully started.");
+app.get("/sse", async (req, res) => {
+  activeTransport = new SSEServerTransport("/messages", res);
+  await server.connect(activeTransport);
+});
+
+app.post("/messages", express.json(), async (req, res) => {
+  if (activeTransport) {
+    await activeTransport.handleMessage(req, res);
+  } else {
+    res.status(400).send("No active server transport connection initialized.");
+  }
+});
+
+// 4. Fire up the web listener bound to Render's dynamic port environment variable
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Custom MCP Web Server is listening on port: ${PORT}`);
+});
